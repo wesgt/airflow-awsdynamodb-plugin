@@ -23,7 +23,10 @@ This module contains operators to replicate records from
 DynamoDB table to S3.
 """
 
+import gzip
+import shutil
 from copy import copy
+from io import BytesIO
 from os.path import getsize
 from tempfile import NamedTemporaryFile
 from typing import Any, Callable, Dict, Optional
@@ -43,11 +46,13 @@ def _upload_file_to_s3(file_obj, bucket_name, s3_key_prefix, aws_conn_id):
     s3_client = S3Hook(aws_conn_id=aws_conn_id).get_conn()
     file_obj.seek(0)
 
-    s3_client.upload_file(
-        Filename=file_obj.name,
-        Bucket=bucket_name,
-        Key=s3_key_prefix + str(uuid4()),
-    )
+    compressed_file_obj = BytesIO()
+    with gzip.GzipFile(fileobj=compressed_file_obj, mode='wb') as gz:
+        shutil.copyfileobj(file_obj, gz)
+
+    compressed_file_obj.seek(0)
+    key = s3_key_prefix + str(uuid4()) + '.gz'
+    s3_client.upload_fileobj(compressed_file_obj, bucket_name, key)
 
 
 class DynamoDBToS3OperatorV2(BaseOperator):
